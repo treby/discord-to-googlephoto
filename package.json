@@ -1,0 +1,29 @@
+{
+  "name": "discord-to-googlephoto",
+  "version": "1.0.0",
+  "description": "Discordチャンネルに投稿された画像をGoogle Photosの指定アルバムへ自動アップロードするBot",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "get-refresh-token": "tsx src/scripts/getRefreshToken.ts",
+    "create-album": "tsx src/scripts/createAlbum.ts"
+  },
+  "dependencies": {
+    "discord.js": "^14.26.5",
+    "dotenv": "^16.4.7",
+    "googleapis": "^173.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
