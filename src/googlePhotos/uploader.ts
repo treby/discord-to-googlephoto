@@ -57,6 +57,23 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
   throw lastError;
 }
 
+/**
+ * Photos Library APIの「concurrent write request」クォータ対策として、
+ * 書き込み系リクエスト(uploads/batchCreate/albums)を1件ずつ直列実行するグローバルキュー。
+ * 添付が複数のメッセージや、複数メッセージがほぼ同時に届いた場合でも
+ * 同時に複数の書き込みリクエストが飛ばないようにする。
+ */
+let writeQueue: Promise<void> = Promise.resolve();
+
+function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(fn, fn);
+  writeQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 async function readErrorBody(response: Response): Promise<string> {
   try {
     return (await response.text()).slice(0, 500);
@@ -79,22 +96,24 @@ async function photosPost(
     body: string | Uint8Array;
   },
 ): Promise<Response> {
-  return withRetry(options.label, async () => {
-    const token = await getAccessToken(auth);
-    const response = await fetch(`${PHOTOS_API_BASE}${options.path}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, ...options.headers },
-      body: options.body,
-    });
-    if (!response.ok) {
-      const message = `${options.label}: HTTP ${response.status} ${await readErrorBody(response)}`;
-      if (response.status >= 500 || response.status === 429) {
-        throw new RetryableError(message, response.status);
+  return withRetry(options.label, () =>
+    enqueueWrite(async () => {
+      const token = await getAccessToken(auth);
+      const response = await fetch(`${PHOTOS_API_BASE}${options.path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, ...options.headers },
+        body: options.body,
+      });
+      if (!response.ok) {
+        const message = `${options.label}: HTTP ${response.status} ${await readErrorBody(response)}`;
+        if (response.status >= 500 || response.status === 429) {
+          throw new RetryableError(message, response.status);
+        }
+        throw new NonRetryableError(message, response.status);
       }
-      throw new NonRetryableError(message, response.status);
-    }
-    return response;
-  });
+      return response;
+    }),
+  );
 }
 
 /**

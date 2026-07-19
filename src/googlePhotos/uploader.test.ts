@@ -219,6 +219,33 @@ describe("uploader", () => {
     });
   });
 
+  describe("書き込みの直列化 (concurrent write request クォータ対策)", () => {
+    it("複数の書き込みリクエストが同時に来ても1件ずつ順番にfetchされる", async () => {
+      let resolveFirst!: (response: Response) => void;
+      const firstResponse = new Promise<Response>((resolve) => {
+        resolveFirst = resolve;
+      });
+      fetchMock
+        .mockImplementationOnce(() => firstResponse)
+        .mockResolvedValueOnce(fakeResponse({ text: async () => "token-2" }));
+
+      const first = uploadBytes(fakeAuth, Buffer.from("a"), "image/jpeg");
+      const second = uploadBytes(fakeAuth, Buffer.from("b"), "image/jpeg");
+
+      // 1件目のfetchが呼ばれるまでマイクロタスクを流すが、まだ完了はしない
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      resolveFirst(fakeResponse({ text: async () => "token-1" }));
+
+      await expect(first).resolves.toBe("token-1");
+      await expect(second).resolves.toBe("token-2");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("createAlbum", () => {
     it("タイトルがリクエストに含まれ、レスポンスのid/titleが返る", async () => {
       fetchMock.mockResolvedValueOnce(
