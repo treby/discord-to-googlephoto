@@ -1,5 +1,7 @@
 # discord-to-googlephoto
 
+<img src="assets/discord-icon.png" alt="アプリアイコン" width="128" align="right">
+
 特定のDiscordチャンネルに投稿された画像・動画を、自動でGoogle Photosの指定アルバムにアップロードし、
 成功したらメッセージに絵文字リアクションを付けるBotです。
 
@@ -29,6 +31,7 @@
    - Read Message History（履歴閲覧）
    - Add Reactions（リアクション追加）
 4. 対象チャンネルのIDを控える（Discordの設定で開発者モードを有効にし、チャンネル右クリック → 「IDをコピー」）
+5. (任意) アプリのアイコンを設定する（**General Information** → **APP ICON** に `assets/discord-icon.png` をアップロード → **Save Changes**）
 
 ### 2. Google側の準備
 
