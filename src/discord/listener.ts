@@ -25,7 +25,7 @@ interface MediaAttachment {
   contentType: string;
 }
 
-function toMediaAttachment(attachment: Attachment): MediaAttachment | null {
+export function toMediaAttachment(attachment: Attachment): MediaAttachment | null {
   const type = attachment.contentType?.split(";")[0]?.trim().toLowerCase();
   if (!type || !(SUPPORTED_CONTENT_TYPES as readonly string[]).includes(type)) {
     return null;
@@ -46,7 +46,7 @@ async function downloadAttachment(attachment: Attachment): Promise<Buffer> {
 /**
  * 画像のEXIFから撮影日時を取り出す。EXIFを持たない画像・動画・解析失敗時はnull。
  */
-async function extractCaptureDate(
+export async function extractCaptureDate(
   data: Buffer,
   contentType: string,
 ): Promise<Date | null> {
@@ -64,7 +64,7 @@ async function extractCaptureDate(
  * 例: "撮影者: treby / 撮影日時: 2026/07/14 23:15:00 / URL: https://discord.com/channels/..."
  * 撮影日時が取れない場合: "作成者: treby / URL: https://discord.com/channels/..."
  */
-function buildDescription(message: Message, captureDate: Date | null): string {
+export function buildDescription(message: Message, captureDate: Date | null): string {
   const displayName =
     message.member?.displayName ?? message.author.displayName;
   const authorLabel = captureDate ? "撮影者" : "作成者";
