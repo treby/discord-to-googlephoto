@@ -1,4 +1,5 @@
 import type { Attachment, Message } from "discord.js";
+import exifr from "exifr";
 import type { OAuth2Client } from "../googlePhotos/client.js";
 import type { Config } from "../config.js";
 import { uploadMediaToAlbum } from "../googlePhotos/uploader.js";
@@ -42,6 +43,43 @@ async function downloadAttachment(attachment: Attachment): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+/**
+ * 画像のEXIFから撮影日時を取り出す。EXIFを持たない画像・動画・解析失敗時はnull。
+ */
+async function extractCaptureDate(
+  data: Buffer,
+  contentType: string,
+): Promise<Date | null> {
+  if (!contentType.startsWith("image/")) return null;
+  try {
+    const exif = await exifr.parse(data, ["DateTimeOriginal", "CreateDate"]);
+    const date: unknown = exif?.DateTimeOriginal ?? exif?.CreateDate;
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 例: "撮影者: treby / 撮影日時: 2026/07/14 23:15:00 / URL: https://discord.com/channels/..."
+ * 撮影日時が取れない場合: "作成者: treby / URL: https://discord.com/channels/..."
+ */
+function buildDescription(message: Message, captureDate: Date | null): string {
+  const displayName =
+    message.member?.displayName ?? message.author.displayName;
+  const authorLabel = captureDate ? "撮影者" : "作成者";
+  const parts: string[] = [`${authorLabel}: ${displayName}`];
+  if (captureDate) {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    parts.push(
+      `撮影日時: ${captureDate.getFullYear()}/${pad(captureDate.getMonth() + 1)}/${pad(captureDate.getDate())} ` +
+        `${pad(captureDate.getHours())}:${pad(captureDate.getMinutes())}:${pad(captureDate.getSeconds())}`,
+    );
+  }
+  parts.push(`URL: ${message.url}`);
+  return parts.join(" / ");
+}
+
 async function processAttachment(
   auth: OAuth2Client,
   config: Config,
@@ -55,11 +93,12 @@ async function processAttachment(
     );
   }
   const data = await downloadAttachment(attachment);
+  const captureDate = await extractCaptureDate(data, contentType);
   await uploadMediaToAlbum(auth, config.GOOGLE_PHOTOS_ALBUM_ID, {
     data,
     contentType,
     fileName: attachment.name,
-    description: `Discord: ${message.author.tag} / message ${message.id}`,
+    description: buildDescription(message, captureDate),
   });
 }
 
