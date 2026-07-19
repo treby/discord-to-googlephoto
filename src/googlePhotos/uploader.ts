@@ -179,24 +179,24 @@ export async function createMediaItems(
 }
 
 /**
- * 画像1枚をアップロードしてアルバムへ追加する（2ステップをまとめたヘルパー）。
+ * 画像・動画1件をアップロードしてアルバムへ追加する（2ステップをまとめたヘルパー）。
  */
-export async function uploadImageToAlbum(
+export async function uploadMediaToAlbum(
   auth: OAuth2Client,
   albumId: string,
-  image: {
+  media: {
     data: Buffer;
     contentType: string;
     fileName: string;
     description?: string;
   },
 ): Promise<void> {
-  const uploadToken = await uploadBytes(auth, image.data, image.contentType);
+  const uploadToken = await uploadBytes(auth, media.data, media.contentType);
   await createMediaItems(auth, albumId, [
     {
       uploadToken,
-      fileName: image.fileName,
-      description: image.description,
+      fileName: media.fileName,
+      description: media.description,
     },
   ]);
 }

@@ -1,7 +1,7 @@
 import type { Attachment, Message } from "discord.js";
 import type { OAuth2Client } from "../googlePhotos/client.js";
 import type { Config } from "../config.js";
-import { uploadImageToAlbum } from "../googlePhotos/uploader.js";
+import { uploadMediaToAlbum } from "../googlePhotos/uploader.js";
 import { react } from "./reactions.js";
 import { logger } from "../utils/logger.js";
 
@@ -10,18 +10,21 @@ const SUPPORTED_CONTENT_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ] as const;
 
-/** Google Photos API的にも現実的な上限として200MBを超える添付はスキップ(エラー扱い) */
+/** Google Photos APIのuploadMedia制約として200MBを超える添付はスキップ(エラー扱い) */
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
 
-interface ImageAttachment {
+interface MediaAttachment {
   attachment: Attachment;
   /** "image/png; charset=..." 形式から主要部のみ取り出した値 */
   contentType: string;
 }
 
-function toImageAttachment(attachment: Attachment): ImageAttachment | null {
+function toMediaAttachment(attachment: Attachment): MediaAttachment | null {
   const type = attachment.contentType?.split(";")[0]?.trim().toLowerCase();
   if (!type || !(SUPPORTED_CONTENT_TYPES as readonly string[]).includes(type)) {
     return null;
@@ -39,20 +42,20 @@ async function downloadAttachment(attachment: Attachment): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function processImage(
+async function processAttachment(
   auth: OAuth2Client,
   config: Config,
   message: Message,
-  image: ImageAttachment,
+  media: MediaAttachment,
 ): Promise<void> {
-  const { attachment, contentType } = image;
+  const { attachment, contentType } = media;
   if (attachment.size > MAX_FILE_SIZE_BYTES) {
     throw new Error(
       `Attachment too large: ${attachment.size} bytes (max ${MAX_FILE_SIZE_BYTES})`,
     );
   }
   const data = await downloadAttachment(attachment);
-  await uploadImageToAlbum(auth, config.GOOGLE_PHOTOS_ALBUM_ID, {
+  await uploadMediaToAlbum(auth, config.GOOGLE_PHOTOS_ALBUM_ID, {
     data,
     contentType,
     fileName: attachment.name,
@@ -70,25 +73,25 @@ export function createMessageListener(auth: OAuth2Client, config: Config) {
       if (message.channelId !== config.DISCORD_TARGET_CHANNEL_ID) return;
       if (message.author.bot) return;
 
-      const images = [...message.attachments.values()]
-        .map(toImageAttachment)
-        .filter((image): image is ImageAttachment => image !== null);
-      if (images.length === 0) {
-        logger.debug("No supported image attachments, skipping", {
+      const media = [...message.attachments.values()]
+        .map(toMediaAttachment)
+        .filter((item): item is MediaAttachment => item !== null);
+      if (media.length === 0) {
+        logger.debug("No supported media attachments, skipping", {
           messageId: message.id,
         });
         return;
       }
 
-      logger.info("Processing image attachments", {
+      logger.info("Processing media attachments", {
         messageId: message.id,
         channelId: message.channelId,
         author: message.author.tag,
-        count: images.length,
+        count: media.length,
       });
 
       const results = await Promise.allSettled(
-        images.map((image) => processImage(auth, config, message, image)),
+        media.map((item) => processAttachment(auth, config, message, item)),
       );
 
       let failureCount = 0;
@@ -98,7 +101,7 @@ export function createMessageListener(auth: OAuth2Client, config: Config) {
           logger.error("Attachment upload failed", {
             messageId: message.id,
             channelId: message.channelId,
-            fileName: images[i].attachment.name,
+            fileName: media[i].attachment.name,
             error: result.reason,
           });
         }
@@ -107,7 +110,7 @@ export function createMessageListener(auth: OAuth2Client, config: Config) {
       if (failureCount === 0) {
         logger.info("All attachments uploaded successfully", {
           messageId: message.id,
-          count: images.length,
+          count: media.length,
         });
         await react(message, config.DISCORD_SUCCESS_EMOJI);
       } else {

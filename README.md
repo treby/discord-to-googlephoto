@@ -1,6 +1,6 @@
 # discord-to-googlephoto
 
-特定のDiscordチャンネルに投稿された画像を、自動でGoogle Photosの指定アルバムにアップロードし、
+特定のDiscordチャンネルに投稿された画像・動画を、自動でGoogle Photosの指定アルバムにアップロードし、
 成功したらメッセージに絵文字リアクションを付けるBotです。
 
 個人利用（自分のGoogleアカウント1つ・自分のDiscordサーバー1つ）を前提とした最小構成です。
@@ -9,7 +9,7 @@
 ## 動作の流れ
 
 1. 対象チャンネルの `messageCreate` を監視
-2. 添付ファイルのうち `image/jpeg` / `image/png` / `image/webp` / `image/gif` を対象に取得
+2. 添付ファイルのうち `image/jpeg` / `image/png` / `image/webp` / `image/gif` / `video/mp4` / `video/quicktime` / `video/webm` を対象に取得
 3. Google Photos Library APIの2ステップ（bytes upload → `mediaItems.batchCreate`）でアルバムへ追加
 4. 全て成功 → ✅ リアクション、1つでも失敗 → ❌ リアクション + エラーログ出力
 
@@ -101,8 +101,13 @@ pm2 start dist/index.js --name discord-to-googlephoto
 
 - Google APIの一時的なエラー（5xx / 429）は最大2回まで指数バックオフでリトライします
 - 認証エラー（401）はリトライせず即座にエラーリアクションになります
-- 200MBを超える添付はエラー扱いでスキップし、ログに残します
+- 200MBを超える添付はエラー扱いでスキップし、ログに残します（Google Photos APIのuploadMedia制約）
 - イベントハンドラ内の例外はすべて捕捉し、Botのgateway接続は維持されます
+
+## 動画アップロードに関する注意
+
+- 数分程度のスマホ動画でもファイルサイズ次第では**Discord側の添付ファイルサイズ上限**（サーバーのブーストレベルやNitroの有無で数十MB〜数百MB）に先に引っかかり、そもそもDiscordに投稿できないことがあります。上限はサーバー設定を確認してください
+- Google Photos側では動画のアップロード後にエンコード処理が走るため、`mediaItems.batchCreate` のレスポンス自体は成功していても、実際にGoogle Photosアプリで再生可能になるまで数秒〜数十秒かかる場合があります
 
 ## スコープ外（やらないこと）
 
@@ -116,7 +121,8 @@ pm2 start dist/index.js --name discord-to-googlephoto
 - [ ] `.env` を正しく設定した状態で `npm run dev` を実行すると、ログに `Discord bot is ready` が出力される
 - [ ] 対象チャンネルに画像を1枚投稿すると、数秒以内にGoogle Photosの指定アルバムに追加され、メッセージに ✅ が付く
 - [ ] 画像を複数枚同時に投稿すると、全てアルバムに追加され ✅ が付く
-- [ ] 画像以外の添付（PDF等）やテキストのみのメッセージには何も起きない
+- [ ] 動画（mp4/mov/webm）を1本投稿すると、Google Photosの指定アルバムに追加され、メッセージに ✅ が付く
+- [ ] 画像・動画以外の添付（PDF等）やテキストのみのメッセージには何も起きない
 - [ ] 対象外チャンネルへの画像投稿には何も起きない
 - [ ] `.env` の `GOOGLE_REFRESH_TOKEN` を意図的に壊して再起動し画像を投稿すると、❌ が付き、ログにエラー内容（401）が出力される
 - [ ] `GOOGLE_PHOTOS_ALBUM_ID` を不正な値にして画像を投稿すると、❌ が付き、ログにエラー内容が出力される
